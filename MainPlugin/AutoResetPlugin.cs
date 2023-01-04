@@ -67,8 +67,8 @@ namespace AutoReset.MainPlugin
             {   
                 config = new ResetConfig
                 {
-                    Szie = ResetConfig.WorldSize.Large,
-                    difficulty= ResetConfig.Difficulties.Master,
+                    Size = ResetConfig.WorldSize.Large,
+                    Difficulty= ResetConfig.Difficulties.Master,
                     KillToReset = new ResetConfig.AutoReset(),
                     SetWorld = new ResetConfig.SetWorldConfig(),
                     PreResetCommands = Array.Empty<string>(),
@@ -354,7 +354,7 @@ namespace AutoReset.MainPlugin
                 case ResetConfig.Difficulties.Master:
                     Main.GameMode = 2;
                     break;
-                case case ResetConfig.Difficulties.Creative:
+                case ResetConfig.Difficulties.Creative:
                     Main.GameMode = 3;
                     break;
             }
