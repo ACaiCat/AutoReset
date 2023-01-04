@@ -70,6 +70,6 @@ namespace AutoReset.MainPlugin
         [JsonProperty("重置是否触发API")]
         public bool API = false;
         [JsonProperty("重置触发API")]
-        public string HttpAPI = "";
+        public string HttpAPI = "http//XSB:8037/UploadServerDataFile?token=xxx&ServerNum=1";
     }
 }

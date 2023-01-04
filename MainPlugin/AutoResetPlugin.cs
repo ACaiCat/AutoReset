@@ -320,7 +320,7 @@ namespace AutoReset.MainPlugin
                 {
                     File.Delete("temp/ServerData.zip");
                 }
-                File.Copy(Main.worldPathName, "temp/reset/World/reset.wld", true);
+                File.Copy(Main.worldPathName, $"temp/reset/World/{Main.worldName}.wld", true);
                 ExportPlayer.ExportAll();
                 ExportPlayer.CompressDirectoryZip("temp/reset", "temp/ServerData.zip");
                 Directory.Delete("temp/reset", true);
