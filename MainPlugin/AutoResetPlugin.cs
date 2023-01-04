@@ -106,7 +106,7 @@ namespace AutoReset.MainPlugin
                 "rs",
                 "重置设置"
             }));
-            ServerApi.Hooks.ServerConnect.Register(this, OnServerConnect, int.MaxValue);
+            ServerApi.Hooks.ServerJoin.Register(this, OnServerJoin, int.MaxValue);
             ServerApi.Hooks.WorldSave.Register(this, OnWorldSave, int.MaxValue);
             ServerApi.Hooks.NpcKilled.Register(this, CountKill);
             GeneralHooks.ReloadEvent += delegate (ReloadEventArgs e)
@@ -136,6 +136,7 @@ namespace AutoReset.MainPlugin
             };
         }
 
+
         private object GataData(RestRequestArgs args)
         {
             Stopwatch sw = new Stopwatch();
@@ -163,17 +164,20 @@ namespace AutoReset.MainPlugin
         private void OnWho(CommandArgs args)
         {
             Status status = this.status;
-            Status status2 = status;
-            if (status2 != Status.Generating)
+            switch (status)
             {
-                if (status2 == Status.Cleaning)
-                {
+                case Status.Export:
+                    args.Player.SendInfoMessage("正在导出存档数据...");
+                    break;
+                case Status.Cleaning:
                     args.Player.SendInfoMessage("重置数据中，请稍后...");
-                }
-            }
-            else
-            {
-                args.Player.SendInfoMessage("生成地图中:" + GetProgress());
+                    break;
+                case Status.Generating:
+                    args.Player.SendInfoMessage("生成地图中:" + GetProgress());
+
+                    break;
+                case Status.Available:
+                    break;
             }
         }
 
@@ -182,8 +186,8 @@ namespace AutoReset.MainPlugin
             if (disposing)
             {
                 ServerApi.Hooks.NpcKilled.Deregister(this, CountKill);
-                ServerApi.Hooks.ServerConnect.Deregister(this, new HookHandler<ConnectEventArgs>(OnServerConnect));
-                ServerApi.Hooks.WorldSave.Deregister(this, new HookHandler<WorldSaveEventArgs>(OnWorldSave));
+                ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
+                ServerApi.Hooks.WorldSave.Deregister(this, OnWorldSave);
             }
             base.Dispose(disposing);
         }
@@ -328,6 +332,8 @@ namespace AutoReset.MainPlugin
             {
                 Commands.HandleCommand(TSPlayer.Server, c);
             });
+            Main.WorldFileMetadata = null;
+            Main.gameMenu = true;
             switch (config.Size)
             {
                 case ResetConfig.WorldSize.Small:
@@ -358,8 +364,6 @@ namespace AutoReset.MainPlugin
                     Main.GameMode = 3;
                     break;
             }
-            Main.WorldFileMetadata = null;
-            Main.gameMenu = true;
             string seed = "";
             if (args.Parameters.Count != 0)
             {
@@ -379,7 +383,7 @@ namespace AutoReset.MainPlugin
             WorldGen.generatingWorld = true;
             Main.rand = new UnifiedRandom(Main.ActiveWorldFileData.Seed);
             Main.menuMode = 10;
-            GenerationProgress generationProgress = new GenerationProgress();
+            generationProgress = new GenerationProgress();
             Task task = WorldGen.CreateNewWorld(generationProgress);
             status = Status.Generating;
             while (!task.IsCompleted)
@@ -475,7 +479,6 @@ namespace AutoReset.MainPlugin
             string text;
 
 
-            #endregion
             switch (args.Parameters[0].ToLowerInvariant())
             {
                 // 帮助
@@ -652,26 +655,30 @@ namespace AutoReset.MainPlugin
 
         private string GetProgress()
         {
-            return string.Format("{0:0.0%} - " + generationProgress.Message + " - {1:0.0%}", generationProgress.TotalProgress, generationProgress.Value);
+             return string.Format("{0:0.0%} - " + generationProgress.Message + " - {1:0.0%}", generationProgress.TotalProgress, generationProgress.Value);
         }
 
-        private void OnServerConnect(ConnectEventArgs args)
+        private void OnServerJoin(JoinEventArgs args)
         {
-            Status status = this.status;
-            Status status2 = status;
             var plr = TShock.Players[args.Who];
-            if (status2 != Status.Generating)
+
+            Status status = this.status;
+            switch (status)
             {
-                if (status2 == Status.Cleaning)
-                {
+                case Status.Export:
+                    plr.Disconnect("正在导出存档数据...");
+                    args.Handled = true;
+                    break;
+                case Status.Cleaning:
                     plr.Disconnect("重置数据中，请稍后...");
                     args.Handled = true;
-                }
-            }
-            else if (status == Status.Export)
-            {
-                plr.Disconnect("正在导出人物存档... ");
-                args.Handled = true;
+                    break;
+                case Status.Generating:
+                    plr.Disconnect("生成地图中:" + GetProgress());
+                    args.Handled = true;
+                    break;
+                case Status.Available:
+                    break;
             }
 
         }
@@ -688,6 +695,7 @@ namespace AutoReset.MainPlugin
 
         private Status status;
 
-        private GenerationProgress generationProgress;
+        public GenerationProgress ?generationProgress = null;
     }
 }
+#endregion

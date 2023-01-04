@@ -60,9 +60,9 @@ namespace AutoReset.MainPlugin
         [JsonProperty("重置后SQL命令")]
         public string[]? SQLs;
         [JsonProperty("地图大小")]
-        public WorldSize? Size;
+        public WorldSize? Size = WorldSize.Large;
         [JsonProperty("世界难度")]
-        public Difficulties? Difficulty;
+        public Difficulties? Difficulty = Difficulties.Master;
         [JsonProperty("地图预设")]
         public SetWorldConfig SetWorld = new();
         [JsonProperty("击杀重置")]
