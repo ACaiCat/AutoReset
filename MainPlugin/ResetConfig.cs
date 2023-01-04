@@ -68,7 +68,7 @@ namespace AutoReset.MainPlugin
         [JsonProperty("击杀重置")]
         public AutoReset KillToReset = new AutoReset();
         [JsonProperty("重置是否触发API")]
-        public bool API = true;
+        public bool API = false;
         [JsonProperty("重置触发API")]
         public string HttpAPI = "";
     }
