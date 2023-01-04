@@ -1,24 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Xna.Framework;
+﻿using System.Reflection;
 using Newtonsoft.Json;
 using Terraria;
 using Terraria.IO;
-using Terraria.Localization;
 using Terraria.Utilities;
 using Terraria.WorldBuilding;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
 using TShockAPI.Hooks;
-using ReLogic.Utilities;
 using Rests;
-using NuGet.Protocol.Plugins;
-using System.Drawing;
+using System.Diagnostics;
+using Google.Protobuf.WellKnownTypes;
 
 
 namespace AutoReset.MainPlugin
@@ -72,18 +64,21 @@ namespace AutoReset.MainPlugin
             }
             bool flag2 = !File.Exists(ConfigPath);
             if (flag2)
-            {
+            {   
                 config = new ResetConfig
                 {
-                    自动击杀重置 = new ResetConfig.AutoReset(),
-                    预设 = new ResetConfig.SetWorld(),
-                    PreResetCommands = new string[0],
-                    PostResetCommands = new string[0],
+                    Szie = ResetConfig.WorldSize.Large,
+                    difficulty= ResetConfig.Difficulties.Master,
+                    KillToReset = new ResetConfig.AutoReset(),
+                    SetWorld = new ResetConfig.SetWorldConfig(),
+                    PreResetCommands = Array.Empty<string>(),
+                    PostResetCommands = Array.Empty<string>(),
                     SQLs = new string[]
                     {
                         "DELETE FROM tsCharacter"
                     },
-                    Files = new Dictionary<string, string>()
+                    Files = new Dictionary<string, string>(),
+                    DelFiles = Array.Empty<string>()
                 };
                 File.WriteAllText(ConfigPath, config.ToJson());
             }
@@ -91,6 +86,8 @@ namespace AutoReset.MainPlugin
             {
                 config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath));
             }
+
+            TShock.RestApi.Register(new SecureRestCommand("/AutoReset/GetData", GataData, "rest.autorest.admin"));
             Commands.ChatCommands.Add(new Command("reset.admin", new CommandDelegate(ResetCmd), new string[]
             {
                 "reset",
@@ -123,8 +120,8 @@ namespace AutoReset.MainPlugin
                 {
                     config = new ResetConfig
                     {
-                        自动击杀重置 = new ResetConfig.AutoReset(),
-                        预设 = new ResetConfig.SetWorld(),
+                        KillToReset = new ResetConfig.AutoReset(),
+                        SetWorld = new ResetConfig.SetWorldConfig(),
                         PreResetCommands = Array.Empty<string>(),
                         PostResetCommands = Array.Empty<string>(),
                         SQLs = new string[]
@@ -136,6 +133,30 @@ namespace AutoReset.MainPlugin
                     File.WriteAllText(ConfigPath, config.ToJson());
                 }
                 e.Player.SendSuccessMessage("自动重置插件配置已重载");
+            };
+        }
+
+        private object GataData(RestRequestArgs args)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+            string base64String = Utils.FileToBase64String("temp/ServerData.zip");
+            sw.Stop();
+            TimeSpan ts = sw.Elapsed;
+            return new RestObject()
+            {
+                {
+                    "response",
+                     base64String
+                },
+                {
+                    "name",
+                    Main.worldName
+                },
+                {
+                    "time",
+                    Math.Round(ts.TotalSeconds,2)
+                }
             };
         }
 
@@ -169,12 +190,12 @@ namespace AutoReset.MainPlugin
 
         private void CountKill(NpcKilledEventArgs args)
         {
-            if (args.npc.netID == config.自动击杀重置.NpcID)
+            if (args.npc.netID == config.KillToReset.NpcID)
             {
-                config.自动击杀重置.已击杀次数++;
+                config.KillToReset.KillCount++;
                 File.WriteAllText(ConfigPath, config.ToJson());
-                TShock.Utils.Broadcast(string.Format($"[自动重置]服务器中已经击杀{Lang.GetNPCName(config.自动击杀重置.NpcID)}{config.自动击杀重置.已击杀次数}/{config.自动击杀重置.需要击杀次数}"), Microsoft.Xna.Framework.Color.Blue);
-                if (config.自动击杀重置.需要击杀次数 <= config.自动击杀重置.已击杀次数)
+                TShock.Utils.Broadcast(string.Format($"[自动重置]服务器中已经击杀{Lang.GetNPCName(config.KillToReset.NpcID)}{config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount}"), Microsoft.Xna.Framework.Color.Blue);
+                if (config.KillToReset.NeedKillCount <= config.KillToReset.KillCount)
                 {
                     Commands.HandleCommand(TSPlayer.Server, $"{TShock.Config.Settings.CommandSpecifier}reset");
                 }
@@ -187,35 +208,35 @@ namespace AutoReset.MainPlugin
             switch (type) //醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith
             {
                 case "醉酒世界":
-                    config.预设.彩蛋.Add("醉酒世界");
+                    config.SetWorld.Special.Add("醉酒世界");
                     break;
 
                 case "NotTheBees":
-                    config.预设.彩蛋.Add("NotTheBees");
+                    config.SetWorld.Special.Add("NotTheBees");
                     break;
 
                 case "ForTheWorthy":
-                    config.预设.彩蛋.Add("ForTheWorthy");
+                    config.SetWorld.Special.Add("ForTheWorthy");
                     break;
 
                 case "Celebrationmk10":
-                    config.预设.彩蛋.Add("Celebrationmk10");
+                    config.SetWorld.Special.Add("Celebrationmk10");
                     break;
 
                 case "永恒领域":
-                    config.预设.彩蛋.Add("永恒领域");
+                    config.SetWorld.Special.Add("永恒领域");
                     break;
 
                 case "NoTraps":
-                    config.预设.彩蛋.Add("NoTraps");
+                    config.SetWorld.Special.Add("NoTraps");
                     break;
 
                 case "Remix":
-                    config.预设.彩蛋.Add("Remix");
+                    config.SetWorld.Special.Add("Remix");
                     break;
 
                 case "Zenith":
-                    config.预设.彩蛋.Add("Zenith");
+                    config.SetWorld.Special.Add("Zenith");
                     break;
 
                 default:
@@ -232,35 +253,35 @@ namespace AutoReset.MainPlugin
             switch (type) //醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith
             {
                 case "醉酒世界":
-                    config.预设.彩蛋.Remove("醉酒世界");
+                    config.SetWorld.Special.Remove("醉酒世界");
                     break;
 
                 case "NotTheBees":
-                    config.预设.彩蛋.Remove("NotTheBees");
+                    config.SetWorld.Special.Remove("NotTheBees");
                     break;
 
                 case "ForTheWorthy":
-                    config.预设.彩蛋.Remove("ForTheWorthy");
+                    config.SetWorld.Special.Remove("ForTheWorthy");
                     break;
 
                 case "Celebrationmk10":
-                    config.预设.彩蛋.Remove("Celebrationmk10");
+                    config.SetWorld.Special.Remove("Celebrationmk10");
                     break;
 
                 case "永恒领域":
-                    config.预设.彩蛋.Remove("永恒领域");
+                    config.SetWorld.Special.Remove("永恒领域");
                     break;
 
                 case "NoTraps":
-                    config.预设.彩蛋.Remove("NoTraps");
+                    config.SetWorld.Special.Remove("NoTraps");
                     break;
 
                 case "Remix":
-                    config.预设.彩蛋.Remove("Remix");
+                    config.SetWorld.Special.Remove("Remix");
                     break;
 
                 case "Zenith":
-                    config.预设.彩蛋.Remove("Zenith");
+                    config.SetWorld.Special.Remove("Zenith");
                     break;
 
                 default:
@@ -301,37 +322,65 @@ namespace AutoReset.MainPlugin
                 Directory.Delete("temp/reset", true);
                 mkdir();
             }).Wait();
+            Utils.CallAPI();
             status = Status.Cleaning;
             config.PreResetCommands.ForEach(delegate (string c)
             {
                 Commands.HandleCommand(TSPlayer.Server, c);
             });
+            switch (config.Size)
+            {
+                case ResetConfig.WorldSize.Small:
+                    Main.maxTilesX = 4200;
+                    Main.maxTilesY = 1200;
+                    break;
+                case ResetConfig.WorldSize.Medium:
+                    Main.maxTilesX = 6400;
+                    Main.maxTilesY = 1800;
+                    break;
+                case ResetConfig.WorldSize.Large:
+                    Main.maxTilesX = 8400;
+                    Main.maxTilesY = 2400;
+                    break;
+            }
+            switch (config.Difficulty)
+            {
+                case ResetConfig.Difficulties.Normal:
+                    Main.GameMode = 0;
+                    break;
+                case ResetConfig.Difficulties.Expert:
+                    Main.GameMode = 1;
+                    break;
+                case ResetConfig.Difficulties.Master:
+                    Main.GameMode = 2;
+                    break;
+                case case ResetConfig.Difficulties.Creative:
+                    Main.GameMode = 3;
+                    break;
+            }
             Main.WorldFileMetadata = null;
             Main.gameMenu = true;
-            Main.maxTilesX = 8400;
-            Main.maxTilesY = 2400;
             string seed = "";
             if (args.Parameters.Count != 0)
             {
                 for (int i = 0; i < args.Parameters.Count; i++)
                     seed += " " + args.Parameters[i];
             }
-            else if (config.预设.Seed == null)
+            else if (config.SetWorld.Seed == null)
             {
                 Main.ActiveWorldFileData.SetSeedToRandom();
             }
 
             else
             {
-                seed = config.预设.Seed;
+                seed = config.SetWorld.Seed;
             }
             Main.ActiveWorldFileData.SetSeed(seed.Trim());
             WorldGen.generatingWorld = true;
             Main.rand = new UnifiedRandom(Main.ActiveWorldFileData.Seed);
-            WorldGen.gen = true;
-            Main.menuMode = 888;
-            generationProgress = new GenerationProgress();
-            Task task = Task.Factory.StartNew(new Action<object>(WorldGen.worldGenCallback), generationProgress);
+            Main.menuMode = 10;
+            GenerationProgress generationProgress = new GenerationProgress();
+            Task task = WorldGen.CreateNewWorld(generationProgress);
             status = Status.Generating;
             while (!task.IsCompleted)
             {
@@ -353,13 +402,13 @@ namespace AutoReset.MainPlugin
             Main.gameMenu = false;
             try
             {
-                if (config.预设.name != null)
+                if (config.SetWorld.Name != null)
                 {
-                    Main.worldName = config.预设.name;
+                    Main.worldName = config.SetWorld.Name;
                 }
                 PostReset();
-                config.自动击杀重置.已击杀次数 = 0;
-                config.预设 = new ResetConfig.SetWorld();
+                config.KillToReset.KillCount = 0;
+                config.SetWorld = new ResetConfig.SetWorldConfig();
                 File.WriteAllText(ConfigPath, config.ToJson());
 
             }
@@ -401,8 +450,8 @@ namespace AutoReset.MainPlugin
 
                 List<string> lines = new List<string> {
                     "/重置设置 info",
-                    "/重置设置 彩蛋 add/del <彩蛋类型>",
-                    "有效的彩蛋类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith",
+                    "/重置设置 Special add/del <Special类型>",
+                    "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith",
                     "/重置设置 name <地图名>",
                     "/重置设置 seed <种子>"
                 };
@@ -441,61 +490,61 @@ namespace AutoReset.MainPlugin
                 // 世界信息
                 case "信息":
                 case "info":
-                    op.SendInfoMessage($"地图名: {(config.预设.name == null ? Main.worldName : config.预设.name)}\n" +
-                                       $"种子: {(config.预设.Seed == null ? "随机" : config.预设.Seed)}\n" +
-                                       $"彩蛋: {(config.预设.彩蛋.Count == 0 ? "无" : string.Join("|", config.预设.彩蛋))}");
+                    op.SendInfoMessage($"地图名: {(config.SetWorld.Name == null ? Main.worldName : config.SetWorld.Name)}\n" +
+                                       $"种子: {(config.SetWorld.Seed == null ? "随机" : config.SetWorld.Seed)}\n" +
+                                       $"Special: {(config.SetWorld.Special.Count == 0 ? "无" : string.Join("|", config.SetWorld.Special))}");
                     break;
-                case "彩蛋":
+                case "Special":
                     if (args.Parameters.Count < 2)
                     {
-                        op.SendErrorMessage("用法错误!正确用法: /重置设置 彩蛋 add/del <彩蛋类型>\n" +
-                                                "有效的彩蛋类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
+                        op.SendErrorMessage("用法错误!正确用法: /重置设置 Special add/del <Special类型>\n" +
+                                                "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
                     }
                     switch (args.Parameters[1])
                     {
                         case "添加":
                         case "add":
-                            if (config.预设.彩蛋.Contains(args.Parameters[2]))
+                            if (config.SetWorld.Special.Contains(args.Parameters[2]))
                             {
-                                op.SendErrorMessage("你已经添加过 " + args.Parameters[2] + " 彩蛋了");
+                                op.SendErrorMessage("你已经添加过 " + args.Parameters[2] + " Special了");
                             }
                             else
                             {
                                 if (AddSeedWorld(args.Parameters[2]))
                                 {
-                                    op.SendSuccessMessage("彩蛋世界 " + args.Parameters[2] + " 添加成功");
+                                    op.SendSuccessMessage("Special世界 " + args.Parameters[2] + " 添加成功");
                                 }
                                 else
                                 {
-                                    op.SendErrorMessage("无效的彩蛋类型!\n" +
-                                        "有效的彩蛋类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
+                                    op.SendErrorMessage("无效的Special类型!\n" +
+                                        "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
                                 }
                             }
                             break;
 
                         case "删除":
                         case "del":
-                            if (config.预设.彩蛋.Contains(args.Parameters[2]))
+                            if (config.SetWorld.Special.Contains(args.Parameters[2]))
                             {
                                 if (DelSeedWorld(args.Parameters[2]))
                                 {
-                                    op.SendSuccessMessage("彩蛋世界 " + args.Parameters[2] + " 添加成功");
+                                    op.SendSuccessMessage("Special世界 " + args.Parameters[2] + " 添加成功");
                                 }
                                 else
                                 {
-                                    op.SendErrorMessage("无效的彩蛋类型!\n" +
-                                        "有效的彩蛋类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
+                                    op.SendErrorMessage("无效的Special类型!\n" +
+                                        "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
                                 }
 
                             }
                             else
                             {
-                                op.SendErrorMessage("不存在 " + args.Parameters[2] + " 彩蛋");
+                                op.SendErrorMessage("不存在 " + args.Parameters[2] + " Special");
                             }
                             break;
                         default:
-                            op.SendErrorMessage("用法错误!正确用法: /重置设置 彩蛋 add/del <彩蛋类型>\n" +
-                                                "有效的彩蛋类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
+                            op.SendErrorMessage("用法错误!正确用法: /重置设置 Special add/del <Special类型>\n" +
+                                                "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
                             return;
                     }
                     break;
@@ -503,13 +552,13 @@ namespace AutoReset.MainPlugin
                 case "name":
                     if (args.Parameters.Count < 2)
                     {
-                        config.预设.name = null;
+                        config.SetWorld.Name = null;
                         File.WriteAllText(ConfigPath, config.ToJson());
                         op.SendSuccessMessage("世界名字已设置为跟随原世界");
                     }
                     else
                     {
-                        config.预设.name = args.Parameters[1];
+                        config.SetWorld.Name = args.Parameters[1];
                         File.WriteAllText(ConfigPath, config.ToJson());
                         op.SendSuccessMessage("世界名字已设置为 " + args.Parameters[1]);
                     }
@@ -518,7 +567,7 @@ namespace AutoReset.MainPlugin
                 case "seed":
                     if (args.Parameters.Count < 2)
                     {
-                        config.预设.Seed = null;
+                        config.SetWorld.Seed = null;
                         File.WriteAllText(ConfigPath, config.ToJson());
                         op.SendSuccessMessage("世界种子已设为随机");
                     }
@@ -527,7 +576,7 @@ namespace AutoReset.MainPlugin
                         string seed = "";
                         for (int i = 1; i < args.Parameters.Count; i++)
                             seed += " " + args.Parameters[i];
-                        config.预设.Seed = seed;
+                        config.SetWorld.Seed = seed;
                         File.WriteAllText(ConfigPath, config.ToJson());
                         op.SendSuccessMessage("世界种子已设置为 " + seed);
                     }
@@ -541,6 +590,10 @@ namespace AutoReset.MainPlugin
             {
                 TShock.DB.Query(c, Array.Empty<object>());
             });
+            foreach (var i in config.DelFiles)
+            {
+                File.Delete(i);
+            }
             foreach (KeyValuePair<string, string> keyValuePair in config.Files)
             {
                 bool flag = !string.IsNullOrEmpty(keyValuePair.Value);
@@ -557,7 +610,7 @@ namespace AutoReset.MainPlugin
             {
                 Commands.HandleCommand(TSPlayer.Server, c);
             });
-            LinqExt.ForEach(config.预设.彩蛋, delegate (string c)
+            LinqExt.ForEach(config.SetWorld.Special, delegate (string c)
             {
 
                 switch (c)
@@ -620,22 +673,7 @@ namespace AutoReset.MainPlugin
                 plr.Disconnect("正在导出人物存档... ");
                 args.Handled = true;
             }
-            if (!Directory.Exists("temp"))
-            {
-                Directory.CreateDirectory("temp");
-            }
-            if (!Directory.Exists("temp/reset"))
-            {
-                Directory.CreateDirectory("temp/reset");
-            }
-            if (!Directory.Exists("temp/reset/World"))
-            {
-                Directory.CreateDirectory("temp/reset/World");
-            }
-            if (!Directory.Exists("temp/reset/Players"))
-            {
-                Directory.CreateDirectory("temp/reset/Players");
-            }
+
         }
         private void OnWorldSave(WorldSaveEventArgs args)
         {
@@ -646,7 +684,7 @@ namespace AutoReset.MainPlugin
 
         private readonly string FilePath = Path.Combine(TShock.SavePath, "backup_files");
 
-        private ResetConfig config;
+        public static ResetConfig config;
 
         private Status status;
 

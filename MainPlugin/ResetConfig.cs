@@ -8,23 +8,42 @@ namespace AutoReset.MainPlugin
     [JsonObject]
     public class ResetConfig
     {
+        public enum WorldSize
+        {
+            Small = 1,
+            Medium = 2,
+            Large =3
+        }
+        public enum Difficulties
+        {
+            Normal = 1,
+            Expert = 2,
+            Master = 3,
+            Creative = 4
+        }
         public string ToJson()
         {
             return JsonConvert.SerializeObject(this, Formatting.Indented);
         }
-        public class SetWorld
+        public class SetWorldConfig
         {
+            [JsonProperty("地图种子")]
             public string? Seed = null;
-            public List<string> 彩蛋 = new List<string>();
-            public string? name = null;
+            [JsonProperty("地图彩蛋")]
+            public List<string> Special = new List<string>();
+            [JsonProperty("地图名")]
+            public string? Name = null;
+
 
         };
         public class AutoReset
         {
+            [JsonProperty("生物ID")]
             public int NpcID = 50;
-            public int 需要击杀次数 = 50;
-
-            public int 已击杀次数 = 0;
+            [JsonProperty("需要击杀次数")]
+            public int NeedKillCount = 50;
+            [JsonProperty("已击杀次数")]
+            public int KillCount = 0;
         }
         [JsonProperty("重置前指令")]
         public string[]? PreResetCommands;
@@ -33,20 +52,24 @@ namespace AutoReset.MainPlugin
         public string[]? PostResetCommands;
 
         [JsonProperty("删除文件")]
-        public Dictionary<string, string>? DelFiles;
+        public string[]? DelFiles;
 
         [JsonProperty("替换文件")]
         public Dictionary<string, string>? Files;
 
         [JsonProperty("重置后SQL命令")]
         public string[]? SQLs;
-
+        [JsonProperty("地图大小")]
+        public WorldSize? Size;
+        [JsonProperty("世界难度")]
+        public Difficulties? Difficulty;
         [JsonProperty("地图预设")]
-        public SetWorld 预设 = new SetWorld();
+        public SetWorldConfig SetWorld = new();
         [JsonProperty("击杀重置")]
-        public AutoReset 自动击杀重置 = new AutoReset();
-
+        public AutoReset KillToReset = new AutoReset();
+        [JsonProperty("重置是否触发API")]
+        public bool API = true;
         [JsonProperty("重置触发API")]
-        public string API = "";
+        public string HttpAPI = "";
     }
 }
