@@ -13,7 +13,7 @@ using Terraria.IO;
 using TShockAPI;
 using TShockAPI.DB;
 
-namespace PlayerManager
+namespace AutoReset.MainPlugin
 {
     /// <summary>
     /// 导出玩家
@@ -41,7 +41,7 @@ namespace PlayerManager
                 directoryInfo.Create();
             }
 
-            ZipFile.CreateFromDirectory(folderPath, zipPath, CompressionLevel.Optimal,false);
+            ZipFile.CreateFromDirectory(folderPath, zipPath, CompressionLevel.Optimal, false);
         }
         public static Dictionary<int, string> GetAccount(string name)
         {
@@ -411,7 +411,7 @@ namespace PlayerManager
                                 SaveSacrifice(binaryWriter);
                                 player.SaveTemporaryItemSlotContents(binaryWriter);
                                 CreativePowerManager.Instance.SaveToPlayer(player, binaryWriter);
-                                BitsByte bitsByte2 = default(BitsByte);
+                                BitsByte bitsByte2 = default;
                                 bitsByte2[0] = player.unlockedSuperCart;
                                 bitsByte2[1] = player.enabledSuperCart;
                                 binaryWriter.Write(bitsByte2);

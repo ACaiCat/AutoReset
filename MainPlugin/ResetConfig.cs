@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using IL.Terraria;
 using Newtonsoft.Json;
 
-namespace ChromeAutoReset
+namespace AutoReset.MainPlugin
 {
-	[JsonObject]
-	public class ResetConfig
-	{
-		public string ToJson()
-		{
-			return JsonConvert.SerializeObject(this, Formatting.Indented);
-		}
+    [JsonObject]
+    public class ResetConfig
+    {
+        public string ToJson()
+        {
+            return JsonConvert.SerializeObject(this, Formatting.Indented);
+        }
         public class SetWorld
         {
-            public string ?Seed = null;
+            public string? Seed = null;
             public List<string> 彩蛋 = new List<string>();
-            public string ?name = null;
+            public string? name = null;
 
         };
         public class AutoReset
@@ -24,22 +24,22 @@ namespace ChromeAutoReset
             public int NpcID = 50;
             public int 需要击杀次数 = 50;
 
-			public int 已击杀次数 = 0;
-        }  
+            public int 已击杀次数 = 0;
+        }
         [JsonProperty("重置前指令")]
-		public string[] ?PreResetCommands;
+        public string[]? PreResetCommands;
 
-		[JsonProperty("重置后指令")]
-		public string[] ?PostResetCommands;
+        [JsonProperty("重置后指令")]
+        public string[]? PostResetCommands;
 
         [JsonProperty("删除文件")]
         public Dictionary<string, string>? DelFiles;
 
         [JsonProperty("替换文件")]
-		public Dictionary<string, string> ?Files;
+        public Dictionary<string, string>? Files;
 
-		[JsonProperty("重置后SQL命令")]
-		public string[] ?SQLs;
+        [JsonProperty("重置后SQL命令")]
+        public string[]? SQLs;
 
         [JsonProperty("地图预设")]
         public SetWorld 预设 = new SetWorld();
