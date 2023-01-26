@@ -40,7 +40,7 @@ namespace AutoReset.MainPlugin
         {
             get
             {
-                return "棱镜 & Cai";
+                return "cc04 & Leader & 棱镜 & Cai";
             }
         }
 
