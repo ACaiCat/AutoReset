@@ -11,7 +11,7 @@ using TShockAPI.Hooks;
 using Rests;
 using System.Diagnostics;
 using Google.Protobuf.WellKnownTypes;
-
+using NuGet.Protocol;
 
 namespace AutoReset.MainPlugin
 {
@@ -40,7 +40,7 @@ namespace AutoReset.MainPlugin
         {
             get
             {
-                return "棱镜 & Cai";
+                return "cc04 & Leader & 棱镜 & Cai";
             }
         }
 
@@ -114,7 +114,7 @@ namespace AutoReset.MainPlugin
                 bool flag3 = File.Exists(ConfigPath);
                 if (flag3)
                 {
-                    config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath));
+                    config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath))!;
                 }
                 else
                 {
@@ -326,7 +326,6 @@ namespace AutoReset.MainPlugin
                 Directory.Delete("temp/reset", true);
                 mkdir();
             }).Wait();
-            Utils.CallAPI();
             status = Status.Cleaning;
             config.PreResetCommands.ForEach(delegate (string c)
             {
@@ -364,22 +363,18 @@ namespace AutoReset.MainPlugin
                     Main.GameMode = 3;
                     break;
             }
-            string seed = "";
             if (args.Parameters.Count != 0)
             {
-                for (int i = 0; i < args.Parameters.Count; i++)
-                    seed += " " + args.Parameters[i];
+                Main.ActiveWorldFileData.SetSeed(String.Join(' ',args.Parameters).Trim());
             }
-            else if (config.SetWorld.Seed == null)
+            else if (!string.IsNullOrEmpty(config.SetWorld.Seed))
+            {
+                Main.ActiveWorldFileData.SetSeed(config.SetWorld.Seed.Trim());
+            }
+            else
             {
                 Main.ActiveWorldFileData.SetSeedToRandom();
             }
-
-            else
-            {
-                seed = config.SetWorld.Seed;
-            }
-            Main.ActiveWorldFileData.SetSeed(seed.Trim());
             WorldGen.generatingWorld = true;
             Main.rand = new UnifiedRandom(Main.ActiveWorldFileData.Seed);
             Main.menuMode = 10;
@@ -418,6 +413,7 @@ namespace AutoReset.MainPlugin
             }
             finally
             {
+                Utils.CallAPI();
                 generationProgress = null;
                 status = Status.Available;
             }
@@ -475,8 +471,6 @@ namespace AutoReset.MainPlugin
                 ShowHelpText();
                 return;
             }
-
-            string text;
 
 
             switch (args.Parameters[0].ToLowerInvariant())

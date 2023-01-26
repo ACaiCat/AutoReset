@@ -41,7 +41,7 @@ namespace AutoReset.MainPlugin
                 directoryInfo.Create();
             }
 
-            ZipFile.CreateFromDirectory(folderPath, zipPath, CompressionLevel.Optimal, false);
+            ZipFile.CreateFromDirectory(folderPath, zipPath, CompressionLevel.SmallestSize, false);
         }
         public static Dictionary<int, string> GetAccount(string name)
         {
