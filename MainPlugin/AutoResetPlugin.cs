@@ -10,8 +10,7 @@ using TShockAPI.DB;
 using TShockAPI.Hooks;
 using Rests;
 using System.Diagnostics;
-using Google.Protobuf.WellKnownTypes;
-using NuGet.Protocol;
+using Microsoft.Xna.Framework;
 
 namespace AutoReset.MainPlugin
 {
@@ -33,7 +32,7 @@ namespace AutoReset.MainPlugin
         {
             get
             {
-                return Assembly.GetExecutingAssembly().GetName().Version;
+                return Assembly.GetExecutingAssembly().GetName().Version!;
             }
         }
         public override string Author
@@ -84,7 +83,7 @@ namespace AutoReset.MainPlugin
             }
             else
             {
-                config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath));
+                config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath))!;
             }
 
             TShock.RestApi.Register(new SecureRestCommand("/AutoReset/GetData", GataData, "rest.autorest.admin"));
@@ -100,6 +99,7 @@ namespace AutoReset.MainPlugin
                 "playing",
                 "online"
             }));
+
 
             Commands.ChatCommands.Add(new Command("reset.admin", new CommandDelegate(ResetSetting), new string[]
             {
@@ -163,6 +163,18 @@ namespace AutoReset.MainPlugin
 
         private void OnWho(CommandArgs args)
         {
+            if (config.KillToReset.KillCount != 0 && config.KillToReset.KillCount != config.KillToReset.NeedKillCount)
+            {
+                if (args.Player.RealPlayer)
+                {
+                    args.Player.SendInfoMessage($"[i:3611]击杀自动重置:{Lang.GetNPCName(config.KillToReset.NpcID)}({config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount})");
+
+                }
+                else
+                {
+                    args.Player.SendInfoMessage($"📝击杀自动重置:{Lang.GetNPCName(config.KillToReset.NpcID)}({config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount})");
+                }
+            }
             Status status = this.status;
             switch (status)
             {
@@ -198,7 +210,7 @@ namespace AutoReset.MainPlugin
             {
                 config.KillToReset.KillCount++;
                 File.WriteAllText(ConfigPath, config.ToJson());
-                TShock.Utils.Broadcast(string.Format($"[自动重置]服务器中已经击杀{Lang.GetNPCName(config.KillToReset.NpcID)}{config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount}"), Microsoft.Xna.Framework.Color.Blue);
+                TShock.Utils.Broadcast(string.Format($"[自动重置]服务器中已经击杀{Lang.GetNPCName(config.KillToReset.NpcID)}{config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount}"),Color.Yellow);
                 if (config.KillToReset.NeedKillCount <= config.KillToReset.KillCount)
                 {
                     Commands.HandleCommand(TSPlayer.Server, $"{TShock.Config.Settings.CommandSpecifier}reset");
@@ -363,18 +375,29 @@ namespace AutoReset.MainPlugin
                     Main.GameMode = 3;
                     break;
             }
+            string seed = "";
             if (args.Parameters.Count != 0)
             {
-                Main.ActiveWorldFileData.SetSeed(String.Join(' ',args.Parameters).Trim());
+                seed = String.Join(' ', args.Parameters);
             }
             else if (!string.IsNullOrEmpty(config.SetWorld.Seed))
             {
-                Main.ActiveWorldFileData.SetSeed(config.SetWorld.Seed.Trim());
+                seed = config.SetWorld.Seed;
             }
             else
             {
+                seed = "";
+            }
+            seed = seed.Trim();
+            if (string.IsNullOrEmpty(seed))
+            {
                 Main.ActiveWorldFileData.SetSeedToRandom();
             }
+            else
+            {
+                Main.ActiveWorldFileData.SetSeed(seed);
+            }
+            Terraria.GameContent.UI.States.UIWorldCreation.ProcessSpecialWorldSeeds(seed);
             WorldGen.generatingWorld = true;
             Main.rand = new UnifiedRandom(Main.ActiveWorldFileData.Seed);
             Main.menuMode = 10;
@@ -449,11 +472,11 @@ namespace AutoReset.MainPlugin
                     return;
 
                 List<string> lines = new List<string> {
-                    "/重置设置 info",
-                    "/重置设置 Special add/del <Special类型>",
+                    "/rs info",
+                    "/rs Special add/del <Special类型>",
                     "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith",
-                    "/重置设置 name <地图名>",
-                    "/重置设置 seed <种子>"
+                    "/rs name <地图名>",
+                    "/rs seed <种子>"
                 };
 
                 PaginationTools.SendPage(
@@ -461,7 +484,7 @@ namespace AutoReset.MainPlugin
                     new PaginationTools.Settings
                     {
                         HeaderFormat = "帮助 ({0}/{1})：",
-                        FooterFormat = "输入 {0}重置设置 help {{0}} 查看更多".SFormat(Commands.Specifier)
+                        FooterFormat = "输入 {0}rs help {{0}} 查看更多".SFormat(Commands.Specifier)
                     }
                 );
             }
@@ -494,7 +517,7 @@ namespace AutoReset.MainPlugin
                 case "Special":
                     if (args.Parameters.Count < 2)
                     {
-                        op.SendErrorMessage("用法错误!正确用法: /重置设置 Special add/del <Special类型>\n" +
+                        op.SendErrorMessage("用法错误!正确用法: /rs Special add/del <Special类型>\n" +
                                                 "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
                     }
                     switch (args.Parameters[1])
@@ -540,7 +563,7 @@ namespace AutoReset.MainPlugin
                             }
                             break;
                         default:
-                            op.SendErrorMessage("用法错误!正确用法: /重置设置 Special add/del <Special类型>\n" +
+                            op.SendErrorMessage("用法错误!正确用法: /rs Special add/del <Special类型>\n" +
                                                 "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
                             return;
                     }
@@ -570,12 +593,20 @@ namespace AutoReset.MainPlugin
                     }
                     else
                     {
-                        string seed = "";
-                        for (int i = 1; i < args.Parameters.Count; i++)
-                            seed += " " + args.Parameters[i];
-                        config.SetWorld.Seed = seed;
+                        var flag = true;
+                        var seedParts = new List<string>();
+                        foreach (var i in args.Parameters)
+                        {
+                            if (flag)
+                            {
+                                flag = false;
+                                continue;
+                            }
+                            seedParts.Add(i);
+                        }
+                        config.SetWorld.Seed = string.Join(" ",seedParts);
                         File.WriteAllText(ConfigPath, config.ToJson());
-                        op.SendSuccessMessage("世界种子已设置为 " + seed);
+                        op.SendSuccessMessage("世界种子已设置为:" + config.SetWorld.Seed);
                     }
                     break;
 
@@ -587,11 +618,11 @@ namespace AutoReset.MainPlugin
             {
                 TShock.DB.Query(c, Array.Empty<object>());
             });
-            foreach (var i in config.DelFiles)
+            foreach (var i in config.DelFiles!)
             {
                 File.Delete(i);
             }
-            foreach (KeyValuePair<string, string> keyValuePair in config.Files)
+            foreach (KeyValuePair<string, string> keyValuePair in config.Files!)
             {
                 bool flag = !string.IsNullOrEmpty(keyValuePair.Value);
                 if (flag)
