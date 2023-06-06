@@ -1,45 +1,51 @@
-# This workflow will build a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+name: Build
 
-name: .NET
-
-on:
+# Controls when the workflow will run
+on: 
   push:
-    branches: [ "master" ]
   pull_request:
-    branches: [ "master" ]
 
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  # This workflow contains a single job called "build"
   build:
-
+    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
+    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    - uses: actions/checkout@v3
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: 6.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
-    - name: Set env output and package
-      id: setenvo
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      run: |
-        echo "TAG_NAME=$(git rev-list --count HEAD)" >> $env:GITHUB_OUTPUT
-        tar cvf AutoReset.tar /home/runner/work/AutoReset/AutoReset/bin/Debug/net6.0/AutoReset.* 
-        Compress-Archive -Path /home/runner/work/AutoReset/AutoReset/bin/Debug/net6.0/AutoReset.*,AutoReset.zip
-    - name: Release
-      uses: softprops/action-gh-release@v1
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      with:
-        prerelease: true
-        tag_name: v${{ steps.setenvo.outputs.TAG_NAME }}
-        name: Release v${{ steps.setenvo.outputs.TAG_NAME }}
-        files: |
-          AutoReset.tar
-          AutoReset.zip
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.100'
+
+      - name: Build the solution
+        run: dotnet build XSB3.0.sln -c Release
+             
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: AutoReset
+          path: /home/runner/work/AutoReset/AutoReset/bin/Debug/net6.0/AutoReset.*
+        
+      - name: Prepare Artifact
+        id: pa
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: 
+          zip -r AutoReset.zip /home/runner/work/AutoReset/AutoReset/bin/Debug/net6.0/AutoReset.* 
+      
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        with:
+          prerelease: true
+          tag_name: Pre-Release
+          name: Release
+          files: AutoReset.zip
+      
+
