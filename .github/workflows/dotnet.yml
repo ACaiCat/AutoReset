@@ -25,7 +25,7 @@ jobs:
           dotnet-version: '6.0.100'
 
       - name: Build the solution
-        run: dotnet build XSB3.0.sln -c Release
+        run: dotnet build -c Release
              
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
