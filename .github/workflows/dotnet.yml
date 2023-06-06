@@ -37,7 +37,7 @@ jobs:
         id: pa
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: 
-          zip -r AutoReset.zip . -i /home/runner/work/AutoReset/AutoReset/bin/Release/net6.0/AutoReset.* 
+          zip -r AutoReset.zip /home/runner/work/AutoReset/AutoReset/bin/Release/net6.0/AutoReset.*
       
       - name: Release
         uses: softprops/action-gh-release@v1
