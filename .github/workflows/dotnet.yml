@@ -31,9 +31,8 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       run: |
         echo "TAG_NAME=$(git rev-list --count HEAD)" >> $env:GITHUB_OUTPUT
-        cp /src/bin/Debug/net6.0/* /
-        tar cvf AutoReset.tar AutoReset.* 
-        Compress-Archive -Path AutoReset.*,AutoReset.zip
+        tar cvf AutoReset.tar /home/runner/work/AutoReset/AutoReset/bin/Debug/net6.0/AutoReset.* 
+        Compress-Archive -Path /home/runner/work/AutoReset/AutoReset/bin/Debug/net6.0/AutoReset.*,AutoReset.zip
     - name: Release
       uses: softprops/action-gh-release@v1
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
