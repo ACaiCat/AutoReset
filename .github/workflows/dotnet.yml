@@ -31,7 +31,7 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       run: |
         echo "TAG_NAME=$(git rev-list --count HEAD)" >> $env:GITHUB_OUTPUT
-        Copy-Item ./src/bin/Debug/net6.0/* ./
+        cp ./src/bin/Debug/net6.0/* ./
         tar cvf AutoReset.tar AutoReset.* 
         Compress-Archive -Path AutoReset.*,AutoReset.zip
     - name: Release
