@@ -26,3 +26,22 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+    - name: Set env output and package
+      id: setenvo
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      run: |
+        dotnet nuget push src/bin/Debug/*.symbols.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
+        echo "TAG_NAME=$(git rev-list --count HEAD)" >> $env:GITHUB_OUTPUT
+        Copy-Item ./src/bin/Debug/net6.0/* ./
+        tar cvf AutoReset.tar AutoReset.* 
+        Compress-Archive -Path AutoReset.*,AutoReset.zip
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      with:
+        prerelease: true
+        tag_name: v${{ steps.setenvo.outputs.TAG_NAME }}
+        name: Release v${{ steps.setenvo.outputs.TAG_NAME }}
+        files: |
+          AutoReset.tar
+          AutoReset.zip
