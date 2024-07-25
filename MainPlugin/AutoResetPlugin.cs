@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 using Terraria;
 using Terraria.GameContent.UI.States;
@@ -16,27 +15,27 @@ namespace AutoReset.MainPlugin;
 [ApiVersion(2, 1)]
 public class AutoResetPlugin : TerrariaPlugin
 {
+    public static ResetConfig Config;
+
+    private readonly string _configPath = Path.Combine(TShock.SavePath, "reset_config.json");
+
+    private readonly string _filePath = Path.Combine(TShock.SavePath, "backup_files");
+
+    private Status _status;
+
+    public GenerationProgress? GenerationProgress;
+
     public AutoResetPlugin(Main game) : base(game)
     {
     }
 
     public override string Name => "AutoReset";
 
-    public override Version Version => Assembly.GetExecutingAssembly().GetName().Version!;
+    public override Version Version => new(2024, 7, 5);
 
     public override string Author => "cc04 & Leader & 棱镜 & Cai";
 
     public override string Description => "完全自动重置插件";
-    
-    private readonly string _configPath = Path.Combine(TShock.SavePath, "reset_config.json");
-
-    private readonly string _filePath = Path.Combine(TShock.SavePath, "backup_files");
-
-    public static ResetConfig Config;
-
-    private Status _status;
-
-    public GenerationProgress? GenerationProgress;
 
     public override void Initialize()
     {
@@ -48,13 +47,17 @@ public class AutoResetPlugin : TerrariaPlugin
             {
                 KillToReset = new ResetConfig.AutoReset(),
                 SetWorld = new ResetConfig.SetWorldConfig(),
-                PreResetCommands = Array.Empty<string>(),
-                PostResetCommands = Array.Empty<string>(),
+                PreResetCommands = new string[] { "/结算金币" },
+                PostResetCommands = new string[] { "/reload","/初始化进度补给箱","/rpg reset" },
                 SqLs = new[]
                 {
                     "DELETE FROM tsCharacter"
                 },
-                Files = new Dictionary<string, string>(),
+                Files = new Dictionary<string, string>()
+                {
+                    {"/tshock/原神.json","原神.json"},
+                    {"/tshock/XSB数据缓存.json",""}
+                }
             };
             File.WriteAllText(_configPath, Config.ToJson());
         }
@@ -138,7 +141,9 @@ public class AutoResetPlugin : TerrariaPlugin
 
     private void CountKill(NpcKilledEventArgs args)
     {
-        if (args.npc.netID == Config.KillToReset.NpcId)
+        
+        
+        if (Config.KillToReset.Enable &&args.npc.netID == Config.KillToReset.NpcId)
         {
             Config.KillToReset.KillCount++;
             File.WriteAllText(_configPath, Config.ToJson());
@@ -153,16 +158,14 @@ public class AutoResetPlugin : TerrariaPlugin
 
     private void ResetCmd(CommandArgs e)
     {
-        if (_status != Status.Available)
-        {
-            return;
-        }
+        if (_status != Status.Available) return;
         Task.Run(delegate
         {
             _status = Status.Cleaning;
+            TShock.Utils.Broadcast("[自动重置]服务器即将开始重置...", Color.Orange);
             for (int i = 60; i >= 0; i--)
             {
-                TShock.Utils.Broadcast(string.Format("[自动重置]重置进程已启动,{0}s后所有玩家将被移出服务器", i), Color.Orange);
+                TShock.Utils.Broadcast(string.Format("[自动重置]{0}s后关闭服务器...", i), Color.Orange);
                 Thread.Sleep(1000);
             }
 
@@ -172,11 +175,10 @@ public class AutoResetPlugin : TerrariaPlugin
             });
 
 
-            
             Config.PreResetCommands.ForEach(delegate(string c) { Commands.HandleCommand(TSPlayer.Server, c); });
             Main.WorldFileMetadata = null;
             Main.gameMenu = true;
-            string seed = "";
+            string seed;
             if (!string.IsNullOrEmpty(Config.SetWorld.Seed))
                 seed = Config.SetWorld.Seed;
             else
@@ -196,8 +198,9 @@ public class AutoResetPlugin : TerrariaPlugin
             while (!task.IsCompleted)
             {
                 TShock.Log.ConsoleInfo(GetProgress());
-                Thread.Sleep(100);
+                Thread.Sleep(1000);
             }
+
             _status = Status.Cleaning;
             Main.rand = new UnifiedRandom((int)DateTime.Now.Ticks);
             WorldFile.LoadWorld(false);
@@ -227,7 +230,7 @@ public class AutoResetPlugin : TerrariaPlugin
             }
         });
     }
-    
+
 
     private void ResetSetting(CommandArgs args)
     {
@@ -316,8 +319,10 @@ public class AutoResetPlugin : TerrariaPlugin
                             flag = false;
                             continue;
                         }
+
                         seedParts.Add(i);
                     }
+
                     Config.SetWorld.Seed = string.Join(" ", seedParts);
                     File.WriteAllText(_configPath, Config.ToJson());
                     op.SendSuccessMessage("世界种子已设置为:" + Config.SetWorld.Seed);
@@ -339,10 +344,8 @@ public class AutoResetPlugin : TerrariaPlugin
             {
                 TShock.Log.ConsoleWarn($"[AutoReset]重置SQL({c})执行失败: {ex.Message}");
             }
-            
         });
         foreach (KeyValuePair<string, string> keyValuePair in Config.Files!)
-        {
             try
             {
                 if (!string.IsNullOrEmpty(keyValuePair.Value))
@@ -355,8 +358,6 @@ public class AutoResetPlugin : TerrariaPlugin
             {
                 TShock.Log.ConsoleWarn($"[AutoReset]重置文件({keyValuePair.Key})替换失败: {ex.Message}");
             }
-
-        }
 
         Config.PostResetCommands.ForEach(delegate(string c) { Commands.HandleCommand(TSPlayer.Server, c); });
     }
@@ -391,7 +392,6 @@ public class AutoResetPlugin : TerrariaPlugin
     {
         args.Handled = _status != Status.Available && Main.WorldFileMetadata == null;
     }
-    
 }
 
 #endregion
