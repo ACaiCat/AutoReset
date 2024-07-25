@@ -1,6 +1,8 @@
 ﻿using System.Reflection;
+using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 using Terraria;
+using Terraria.GameContent.UI.States;
 using Terraria.IO;
 using Terraria.Utilities;
 using Terraria.WorldBuilding;
@@ -8,408 +10,195 @@ using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
 using TShockAPI.Hooks;
-using Rests;
-using System.Diagnostics;
-using Microsoft.Xna.Framework;
 
-namespace AutoReset.MainPlugin
+namespace AutoReset.MainPlugin;
+
+[ApiVersion(2, 1)]
+public class AutoResetPlugin : TerrariaPlugin
 {
-    [ApiVersion(2, 1)]
-    public class AutoResetPlugin : TerrariaPlugin
+    public AutoResetPlugin(Main game) : base(game)
     {
-        public AutoResetPlugin(Main game) : base(game)
-        {
-        }
-        public override string Name
-        {
-            get
-            {
-                return "OneKeyReset";
-            }
-        }
+    }
 
-        public override Version Version
-        {
-            get
-            {
-                return Assembly.GetExecutingAssembly().GetName().Version!;
-            }
-        }
-        public override string Author
-        {
-            get
-            {
-                return "cc04 & Leader & 棱镜 & Cai";
-            }
-        }
+    public override string Name => "AutoReset";
 
-        public override string Description
+    public override Version Version => Assembly.GetExecutingAssembly().GetName().Version!;
+
+    public override string Author => "cc04 & Leader & 棱镜 & Cai";
+
+    public override string Description => "完全自动重置插件";
+    
+    private readonly string _configPath = Path.Combine(TShock.SavePath, "reset_config.json");
+
+    private readonly string _filePath = Path.Combine(TShock.SavePath, "backup_files");
+
+    public static ResetConfig Config;
+
+    private Status _status;
+
+    public GenerationProgress? GenerationProgress;
+
+    public override void Initialize()
+    {
+        if (!Directory.Exists(_filePath))
+            Directory.CreateDirectory(_filePath);
+        if (!File.Exists(_configPath))
         {
-            get
+            Config = new ResetConfig
             {
-                return "完全自动重置插件";
-            }
-        }
-
-        public override void Initialize()
-        {
-
-            mkdir();
-
-            bool flag = !Directory.Exists(FilePath);
-            if (flag)
-            {
-                Directory.CreateDirectory(FilePath);
-            }
-            bool flag2 = !File.Exists(ConfigPath);
-            if (flag2)
-            {   
-                config = new ResetConfig
+                KillToReset = new ResetConfig.AutoReset(),
+                SetWorld = new ResetConfig.SetWorldConfig(),
+                PreResetCommands = Array.Empty<string>(),
+                PostResetCommands = Array.Empty<string>(),
+                SqLs = new[]
                 {
-                    Size = ResetConfig.WorldSize.Large,
-                    Difficulty= ResetConfig.Difficulties.Master,
+                    "DELETE FROM tsCharacter"
+                },
+                Files = new Dictionary<string, string>(),
+            };
+            File.WriteAllText(_configPath, Config.ToJson());
+        }
+        else
+        {
+            Config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(_configPath))!;
+        }
+
+        Commands.ChatCommands.Add(new Command("reset.admin", ResetCmd, "reset", "重置世界"));
+        Commands.ChatCommands.Add(new Command("", OnWho, "who", "playing", "online"));
+
+        Commands.ChatCommands.Add(new Command("reset.admin", ResetSetting, "rs", "重置设置"));
+        ServerApi.Hooks.ServerJoin.Register(this, OnServerJoin, int.MaxValue);
+        ServerApi.Hooks.WorldSave.Register(this, OnWorldSave, int.MaxValue);
+        ServerApi.Hooks.NpcKilled.Register(this, CountKill);
+        GeneralHooks.ReloadEvent += delegate(ReloadEventArgs e)
+        {
+            if (File.Exists(_configPath))
+            {
+                Config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(_configPath))!;
+            }
+            else
+            {
+                Config = new ResetConfig
+                {
                     KillToReset = new ResetConfig.AutoReset(),
                     SetWorld = new ResetConfig.SetWorldConfig(),
                     PreResetCommands = Array.Empty<string>(),
                     PostResetCommands = Array.Empty<string>(),
-                    SQLs = new string[]
+                    SqLs = new[]
                     {
                         "DELETE FROM tsCharacter"
                     },
-                    Files = new Dictionary<string, string>(),
-                    DelFiles = Array.Empty<string>()
+                    Files = new Dictionary<string, string>()
                 };
-                File.WriteAllText(ConfigPath, config.ToJson());
+                File.WriteAllText(_configPath, Config.ToJson());
             }
+
+            e.Player.SendSuccessMessage("[AutoReset]自动重置插件配置已重载");
+        };
+    }
+
+
+    private void OnWho(CommandArgs args)
+    {
+        if (Config.KillToReset.KillCount != 0 && Config.KillToReset.KillCount != Config.KillToReset.NeedKillCount)
+        {
+            if (args.Player.RealPlayer)
+                args.Player.SendInfoMessage(
+                    $"[i:3611]击杀自动重置:{Lang.GetNPCName(Config.KillToReset.NpcId)}({Config.KillToReset.KillCount}/{Config.KillToReset.NeedKillCount})");
             else
-            {
-                config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath))!;
-            }
-
-            TShock.RestApi.Register(new SecureRestCommand("/AutoReset/GetData", GataData, "rest.autorest.admin"));
-            Commands.ChatCommands.Add(new Command("reset.admin", new CommandDelegate(ResetCmd), new string[]
-            {
-                "reset",
-                "重置世界"
-            }));
-            Commands.ChatCommands.Add(new Command("", new CommandDelegate(OnWho), new string[]
-            {
-
-                "who",
-                "playing",
-                "online"
-            }));
-
-
-            Commands.ChatCommands.Add(new Command("reset.admin", new CommandDelegate(ResetSetting), new string[]
-            {
-                "rs",
-                "重置设置"
-            }));
-            ServerApi.Hooks.ServerJoin.Register(this, OnServerJoin, int.MaxValue);
-            ServerApi.Hooks.WorldSave.Register(this, OnWorldSave, int.MaxValue);
-            ServerApi.Hooks.NpcKilled.Register(this, CountKill);
-            GeneralHooks.ReloadEvent += delegate (ReloadEventArgs e)
-            {
-                bool flag3 = File.Exists(ConfigPath);
-                if (flag3)
-                {
-                    config = JsonConvert.DeserializeObject<ResetConfig>(File.ReadAllText(ConfigPath))!;
-                }
-                else
-                {
-                    config = new ResetConfig
-                    {
-                        KillToReset = new ResetConfig.AutoReset(),
-                        SetWorld = new ResetConfig.SetWorldConfig(),
-                        PreResetCommands = Array.Empty<string>(),
-                        PostResetCommands = Array.Empty<string>(),
-                        SQLs = new string[]
-                        {
-                            "DELETE FROM tsCharacter"
-                        },
-                        Files = new Dictionary<string, string>()
-                    };
-                    File.WriteAllText(ConfigPath, config.ToJson());
-                }
-                e.Player.SendSuccessMessage("自动重置插件配置已重载");
-            };
+                args.Player.SendInfoMessage(
+                    $"📝击杀自动重置:{Lang.GetNPCName(Config.KillToReset.NpcId)}({Config.KillToReset.KillCount}/{Config.KillToReset.NeedKillCount})");
         }
 
-
-        private object GataData(RestRequestArgs args)
+        Status status = _status;
+        switch (status)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-            string base64String = Utils.FileToBase64String("temp/ServerData.zip");
-            sw.Stop();
-            TimeSpan ts = sw.Elapsed;
-            return new RestObject()
-            {
-                {
-                    "response",
-                     base64String
-                },
-                {
-                    "name",
-                    Main.worldName
-                },
-                {
-                    "time",
-                    Math.Round(ts.TotalSeconds,2)
-                }
-            };
+            case Status.Cleaning:
+                args.Player.SendInfoMessage("重置数据中, 请稍后...");
+                break;
+            case Status.Generating:
+                args.Player.SendInfoMessage("生成地图中: " + GetProgress());
+                break;
+            case Status.Available:
+                break;
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            ServerApi.Hooks.NpcKilled.Deregister(this, CountKill);
+            ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
+            ServerApi.Hooks.WorldSave.Deregister(this, OnWorldSave);
         }
 
-        private void OnWho(CommandArgs args)
+        base.Dispose(disposing);
+    }
+
+    private void CountKill(NpcKilledEventArgs args)
+    {
+        if (args.npc.netID == Config.KillToReset.NpcId)
         {
-            if (config.KillToReset.KillCount != 0 && config.KillToReset.KillCount != config.KillToReset.NeedKillCount)
-            {
-                if (args.Player.RealPlayer)
-                {
-                    args.Player.SendInfoMessage($"[i:3611]击杀自动重置:{Lang.GetNPCName(config.KillToReset.NpcID)}({config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount})");
-
-                }
-                else
-                {
-                    args.Player.SendInfoMessage($"📝击杀自动重置:{Lang.GetNPCName(config.KillToReset.NpcID)}({config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount})");
-                }
-            }
-            Status status = this.status;
-            switch (status)
-            {
-                case Status.Export:
-                    args.Player.SendInfoMessage("正在导出存档数据...");
-                    break;
-                case Status.Cleaning:
-                    args.Player.SendInfoMessage("重置数据中，请稍后...");
-                    break;
-                case Status.Generating:
-                    args.Player.SendInfoMessage("生成地图中:" + GetProgress());
-
-                    break;
-                case Status.Available:
-                    break;
-            }
+            Config.KillToReset.KillCount++;
+            File.WriteAllText(_configPath, Config.ToJson());
+            TShock.Utils.Broadcast(
+                string.Format(
+                    $"[自动重置]服务器中已经击杀{Lang.GetNPCName(Config.KillToReset.NpcId)}{Config.KillToReset.KillCount}/{Config.KillToReset.NeedKillCount}"),
+                Color.Orange);
+            if (Config.KillToReset.NeedKillCount <= Config.KillToReset.KillCount)
+                ResetCmd(null);
         }
+    }
 
-        protected override void Dispose(bool disposing)
+    private void ResetCmd(CommandArgs e)
+    {
+        if (_status != Status.Available)
         {
-            if (disposing)
-            {
-                ServerApi.Hooks.NpcKilled.Deregister(this, CountKill);
-                ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
-                ServerApi.Hooks.WorldSave.Deregister(this, OnWorldSave);
-            }
-            base.Dispose(disposing);
+            return;
         }
-
-        private void CountKill(NpcKilledEventArgs args)
+        Task.Run(delegate
         {
-            if (args.npc.netID == config.KillToReset.NpcID)
+            _status = Status.Cleaning;
+            for (int i = 60; i >= 0; i--)
             {
-                config.KillToReset.KillCount++;
-                File.WriteAllText(ConfigPath, config.ToJson());
-                TShock.Utils.Broadcast(string.Format($"[自动重置]服务器中已经击杀{Lang.GetNPCName(config.KillToReset.NpcID)}{config.KillToReset.KillCount}/{config.KillToReset.NeedKillCount}"),Color.Yellow);
-                if (config.KillToReset.NeedKillCount <= config.KillToReset.KillCount)
-                {
-                    Commands.HandleCommand(TSPlayer.Server, $"{TShock.Config.Settings.CommandSpecifier}reset");
-                }
+                TShock.Utils.Broadcast(string.Format("[自动重置]重置进程已启动,{0}s后所有玩家将被移出服务器", i), Color.Orange);
+                Thread.Sleep(1000);
             }
 
-        }
-
-        public bool AddSeedWorld(string type)
-        {
-            switch (type) //醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith
+            TShock.Players.ForEach(delegate(TSPlayer? p)
             {
-                case "醉酒世界":
-                    config.SetWorld.Special.Add("醉酒世界");
-                    break;
-
-                case "NotTheBees":
-                    config.SetWorld.Special.Add("NotTheBees");
-                    break;
-
-                case "ForTheWorthy":
-                    config.SetWorld.Special.Add("ForTheWorthy");
-                    break;
-
-                case "Celebrationmk10":
-                    config.SetWorld.Special.Add("Celebrationmk10");
-                    break;
-
-                case "永恒领域":
-                    config.SetWorld.Special.Add("永恒领域");
-                    break;
-
-                case "NoTraps":
-                    config.SetWorld.Special.Add("NoTraps");
-                    break;
-
-                case "Remix":
-                    config.SetWorld.Special.Add("Remix");
-                    break;
-
-                case "Zenith":
-                    config.SetWorld.Special.Add("Zenith");
-                    break;
-
-                default:
-
-                    return false;
-            }
-            File.WriteAllText(ConfigPath, config.ToJson());
-            return true;
-
-        }
-
-        public bool DelSeedWorld(string type)
-        {
-            switch (type) //醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith
-            {
-                case "醉酒世界":
-                    config.SetWorld.Special.Remove("醉酒世界");
-                    break;
-
-                case "NotTheBees":
-                    config.SetWorld.Special.Remove("NotTheBees");
-                    break;
-
-                case "ForTheWorthy":
-                    config.SetWorld.Special.Remove("ForTheWorthy");
-                    break;
-
-                case "Celebrationmk10":
-                    config.SetWorld.Special.Remove("Celebrationmk10");
-                    break;
-
-                case "永恒领域":
-                    config.SetWorld.Special.Remove("永恒领域");
-                    break;
-
-                case "NoTraps":
-                    config.SetWorld.Special.Remove("NoTraps");
-                    break;
-
-                case "Remix":
-                    config.SetWorld.Special.Remove("Remix");
-                    break;
-
-                case "Zenith":
-                    config.SetWorld.Special.Remove("Zenith");
-                    break;
-
-                default:
-
-                    return false;
-            }
-            File.WriteAllText(ConfigPath, config.ToJson());
-            return true;
-
-        }
-        private void ResetCmd(CommandArgs args)
-        {
-            Task.Run(delegate ()
-            {
-                for (int i = 5; i >= 0; i--)
-                {
-                    TShock.Utils.Broadcast(string.Format("[自动重置]重置进程已启动,{0}s后所有玩家将被移出服务器", i), Microsoft.Xna.Framework.Color.Yellow);
-                    Thread.Sleep(1000);
-                }
-                TShock.Players.ForEach(delegate (TSPlayer p)
-                {
-                    if (p != null)
-                    {
-                        p.Kick("服务器已开始重置", true, true, null, false);
-                    }
-                });
-            }).Wait();
-            status = Status.Export;
-            Task.Run(delegate ()
-            {
-                if (File.Exists("temp/ServerData.zip"))
-                {
-                    File.Delete("temp/ServerData.zip");
-                }
-                File.Copy(Main.worldPathName, $"temp/reset/World/{Main.worldName}.wld", true);
-                ExportPlayer.ExportAll();
-                ExportPlayer.CompressDirectoryZip("temp/reset", "temp/ServerData.zip");
-                Directory.Delete("temp/reset", true);
-                mkdir();
-            }).Wait();
-            status = Status.Cleaning;
-            config.PreResetCommands.ForEach(delegate (string c)
-            {
-                Commands.HandleCommand(TSPlayer.Server, c);
+                if (p != null) p.Kick("[自动重置]服务器已开始重置...", true, true);
             });
+
+
+            
+            Config.PreResetCommands.ForEach(delegate(string c) { Commands.HandleCommand(TSPlayer.Server, c); });
             Main.WorldFileMetadata = null;
             Main.gameMenu = true;
-            switch (config.Size)
-            {
-                case ResetConfig.WorldSize.Small:
-                    Main.maxTilesX = 4200;
-                    Main.maxTilesY = 1200;
-                    break;
-                case ResetConfig.WorldSize.Medium:
-                    Main.maxTilesX = 6400;
-                    Main.maxTilesY = 1800;
-                    break;
-                case ResetConfig.WorldSize.Large:
-                    Main.maxTilesX = 8400;
-                    Main.maxTilesY = 2400;
-                    break;
-            }
-            switch (config.Difficulty)
-            {
-                case ResetConfig.Difficulties.Normal:
-                    Main.GameMode = 0;
-                    break;
-                case ResetConfig.Difficulties.Expert:
-                    Main.GameMode = 1;
-                    break;
-                case ResetConfig.Difficulties.Master:
-                    Main.GameMode = 2;
-                    break;
-                case ResetConfig.Difficulties.Creative:
-                    Main.GameMode = 3;
-                    break;
-            }
             string seed = "";
-            if (args.Parameters.Count != 0)
-            {
-                seed = String.Join(' ', args.Parameters);
-            }
-            else if (!string.IsNullOrEmpty(config.SetWorld.Seed))
-            {
-                seed = config.SetWorld.Seed;
-            }
+            if (!string.IsNullOrEmpty(Config.SetWorld.Seed))
+                seed = Config.SetWorld.Seed;
             else
-            {
                 seed = "";
-            }
             seed = seed.Trim();
             if (string.IsNullOrEmpty(seed))
-            {
                 Main.ActiveWorldFileData.SetSeedToRandom();
-            }
             else
-            {
                 Main.ActiveWorldFileData.SetSeed(seed);
-            }
-            Terraria.GameContent.UI.States.UIWorldCreation.ProcessSpecialWorldSeeds(seed);
+            UIWorldCreation.ProcessSpecialWorldSeeds(seed);
             WorldGen.generatingWorld = true;
             Main.rand = new UnifiedRandom(Main.ActiveWorldFileData.Seed);
             Main.menuMode = 10;
-            generationProgress = new GenerationProgress();
-            Task task = WorldGen.CreateNewWorld(generationProgress);
-            status = Status.Generating;
+            GenerationProgress = new GenerationProgress();
+            Task task = WorldGen.CreateNewWorld(GenerationProgress);
+            _status = Status.Generating;
             while (!task.IsCompleted)
             {
                 TShock.Log.ConsoleInfo(GetProgress());
                 Thread.Sleep(100);
             }
-            status = Status.Cleaning;
+            _status = Status.Cleaning;
             Main.rand = new UnifiedRandom((int)DateTime.Now.Ticks);
             WorldFile.LoadWorld(false);
             Main.dayTime = WorldFile._tempDayTime;
@@ -424,303 +213,185 @@ namespace AutoReset.MainPlugin
             Main.gameMenu = false;
             try
             {
-                if (config.SetWorld.Name != null)
-                {
-                    Main.worldName = config.SetWorld.Name;
-                }
+                if (Config.SetWorld.Name != null) Main.worldName = Config.SetWorld.Name;
                 PostReset();
-                config.KillToReset.KillCount = 0;
-                config.SetWorld = new ResetConfig.SetWorldConfig();
-                File.WriteAllText(ConfigPath, config.ToJson());
-
+                Config.KillToReset.KillCount = 0;
+                Config.SetWorld = new ResetConfig.SetWorldConfig();
+                File.WriteAllText(_configPath, Config.ToJson());
             }
             finally
             {
-                Utils.CallAPI();
-                generationProgress = null;
-                status = Status.Available;
+                Utils.CallApi();
+                GenerationProgress = null;
+                _status = Status.Available;
             }
+        });
+    }
+    
+
+    private void ResetSetting(CommandArgs args)
+    {
+        TSPlayer op = args.Player;
+
+        #region help
+
+        void ShowHelpText()
+        {
+            if (!PaginationTools.TryParsePageNumber(args.Parameters, 1, op, out int pageNumber))
+                return;
+
+            List<string> lines = new()
+            {
+                "/rs info",
+                "/rs name <地图名>",
+                "/rs seed <种子>"
+            };
+
+            PaginationTools.SendPage(
+                op, pageNumber, lines,
+                new PaginationTools.Settings
+                {
+                    HeaderFormat = "帮助 ({0}/{1})：",
+                    FooterFormat = "输入 {0}rs help {{0}} 查看更多".SFormat(Commands.Specifier)
+                }
+            );
+        }
+
+        if (args.Parameters.Count == 0)
+        {
+            ShowHelpText();
+            return;
         }
 
 
-        public static void mkdir()
+        switch (args.Parameters[0].ToLowerInvariant())
         {
-            if (!Directory.Exists("temp"))
-            {
-                Directory.CreateDirectory("temp");
-            }
-            if (!Directory.Exists("temp/reset"))
-            {
-                Directory.CreateDirectory("temp/reset");
-            }
-            if (!Directory.Exists("temp/reset/World"))
-            {
-                Directory.CreateDirectory("temp/reset/World");
-            }
-            if (!Directory.Exists("temp/reset/Players"))
-            {
-                Directory.CreateDirectory("temp/reset/Players");
-            }
-        }
-        private void ResetSetting(CommandArgs args)
-        {
-            TSPlayer op = args.Player;
-            #region help
-            void ShowHelpText()
-            {
-                if (!PaginationTools.TryParsePageNumber(args.Parameters, 1, op, out int pageNumber))
-                    return;
-
-                List<string> lines = new List<string> {
-                    "/rs info",
-                    "/rs Special add/del <Special类型>",
-                    "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith",
-                    "/rs name <地图名>",
-                    "/rs seed <种子>"
-                };
-
-                PaginationTools.SendPage(
-                    op, pageNumber, lines,
-                    new PaginationTools.Settings
-                    {
-                        HeaderFormat = "帮助 ({0}/{1})：",
-                        FooterFormat = "输入 {0}rs help {{0}} 查看更多".SFormat(Commands.Specifier)
-                    }
-                );
-            }
-
-            if (args.Parameters.Count == 0)
-            {
+            // 帮助
+            case "help":
                 ShowHelpText();
                 return;
-            }
 
+            default:
+                ShowHelpText();
+                break;
 
-            switch (args.Parameters[0].ToLowerInvariant())
-            {
-                // 帮助
-                case "help":
-                    ShowHelpText();
-                    return;
-
-                default:
-                    ShowHelpText();
-                    break;
-
-                // 世界信息
-                case "信息":
-                case "info":
-                    op.SendInfoMessage($"地图名: {(config.SetWorld.Name == null ? Main.worldName : config.SetWorld.Name)}\n" +
-                                       $"种子: {(config.SetWorld.Seed == null ? "随机" : config.SetWorld.Seed)}\n" +
-                                       $"Special: {(config.SetWorld.Special.Count == 0 ? "无" : string.Join("|", config.SetWorld.Special))}");
-                    break;
-                case "Special":
-                    if (args.Parameters.Count < 2)
-                    {
-                        op.SendErrorMessage("用法错误!正确用法: /rs Special add/del <Special类型>\n" +
-                                                "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
-                    }
-                    switch (args.Parameters[1])
-                    {
-                        case "添加":
-                        case "add":
-                            if (config.SetWorld.Special.Contains(args.Parameters[2]))
-                            {
-                                op.SendErrorMessage("你已经添加过 " + args.Parameters[2] + " Special了");
-                            }
-                            else
-                            {
-                                if (AddSeedWorld(args.Parameters[2]))
-                                {
-                                    op.SendSuccessMessage("Special世界 " + args.Parameters[2] + " 添加成功");
-                                }
-                                else
-                                {
-                                    op.SendErrorMessage("无效的Special类型!\n" +
-                                        "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
-                                }
-                            }
-                            break;
-
-                        case "删除":
-                        case "del":
-                            if (config.SetWorld.Special.Contains(args.Parameters[2]))
-                            {
-                                if (DelSeedWorld(args.Parameters[2]))
-                                {
-                                    op.SendSuccessMessage("Special世界 " + args.Parameters[2] + " 添加成功");
-                                }
-                                else
-                                {
-                                    op.SendErrorMessage("无效的Special类型!\n" +
-                                        "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
-                                }
-
-                            }
-                            else
-                            {
-                                op.SendErrorMessage("不存在 " + args.Parameters[2] + " Special");
-                            }
-                            break;
-                        default:
-                            op.SendErrorMessage("用法错误!正确用法: /rs Special add/del <Special类型>\n" +
-                                                "有效的Special类型: 醉酒世界|NotTheBees|ForTheWorthy|Celebrationmk10|永恒领域|NoTraps|Remix|Zenith");
-                            return;
-                    }
-                    break;
-                case "名字":
-                case "name":
-                    if (args.Parameters.Count < 2)
-                    {
-                        config.SetWorld.Name = null;
-                        File.WriteAllText(ConfigPath, config.ToJson());
-                        op.SendSuccessMessage("世界名字已设置为跟随原世界");
-                    }
-                    else
-                    {
-                        config.SetWorld.Name = args.Parameters[1];
-                        File.WriteAllText(ConfigPath, config.ToJson());
-                        op.SendSuccessMessage("世界名字已设置为 " + args.Parameters[1]);
-                    }
-                    break;
-                case "种子":
-                case "seed":
-                    if (args.Parameters.Count < 2)
-                    {
-                        config.SetWorld.Seed = null;
-                        File.WriteAllText(ConfigPath, config.ToJson());
-                        op.SendSuccessMessage("世界种子已设为随机");
-                    }
-                    else
-                    {
-                        var flag = true;
-                        var seedParts = new List<string>();
-                        foreach (var i in args.Parameters)
-                        {
-                            if (flag)
-                            {
-                                flag = false;
-                                continue;
-                            }
-                            seedParts.Add(i);
-                        }
-                        config.SetWorld.Seed = string.Join(" ",seedParts);
-                        File.WriteAllText(ConfigPath, config.ToJson());
-                        op.SendSuccessMessage("世界种子已设置为:" + config.SetWorld.Seed);
-                    }
-                    break;
-
-            }
-        }
-        private void PostReset()
-        {
-            config.SQLs.ForEach(delegate (string c)
-            {
-                TShock.DB.Query(c, Array.Empty<object>());
-            });
-            foreach (var i in config.DelFiles!)
-            {
-                File.Delete(i);
-            }
-            foreach (KeyValuePair<string, string> keyValuePair in config.Files!)
-            {
-                bool flag = !string.IsNullOrEmpty(keyValuePair.Value);
-                if (flag)
+            // 世界信息
+            case "信息":
+            case "info":
+                op.SendInfoMessage($"地图名: {(Config.SetWorld.Name == null ? Main.worldName : Config.SetWorld.Name)}\n" +
+                                   $"种子: {(Config.SetWorld.Seed == null ? "随机" : Config.SetWorld.Seed)}");
+                break;
+            case "名字":
+            case "name":
+                if (args.Parameters.Count < 2)
                 {
-                    File.Copy(Path.Combine(FilePath, keyValuePair.Value), Path.Combine(Environment.CurrentDirectory, keyValuePair.Key), true);
+                    Config.SetWorld.Name = null;
+                    File.WriteAllText(_configPath, Config.ToJson());
+                    op.SendSuccessMessage("世界名字已设置为跟随原世界");
                 }
                 else
                 {
-                    File.Delete(keyValuePair.Key);
+                    Config.SetWorld.Name = args.Parameters[1];
+                    File.WriteAllText(_configPath, Config.ToJson());
+                    op.SendSuccessMessage("世界名字已设置为 " + args.Parameters[1]);
                 }
-            }
-            config.PostResetCommands.ForEach(delegate (string c)
-            {
-                Commands.HandleCommand(TSPlayer.Server, c);
-            });
-            LinqExt.ForEach(config.SetWorld.Special, delegate (string c)
-            {
 
-                switch (c)
+                break;
+            case "种子":
+            case "seed":
+                if (args.Parameters.Count < 2)
                 {
-                    case "醉酒世界":
-                        Main.drunkWorld = true;
-                        break;
-
-                    case "NotTheBees":
-                        Main.notTheBeesWorld = true;
-                        break;
-
-                    case "ForTheWorthy":
-                        Main.getGoodWorld = true;
-                        break;
-
-                    case "Celebrationmk10":
-                        Main.tenthAnniversaryWorld = true;
-                        break;
-
-                    case "永恒领域":
-                        Main.dontStarveWorld = true;
-                        break;
-
-                    case "NoTraps":
-                        Main.noTrapsWorld = true;
-                        break;
-
-                    case "Remix":
-                        Main.remixWorld = true;
-                        break;
-
-                    case "Zenith":
-                        Main.zenithWorld = true;
-                        break;
+                    Config.SetWorld.Seed = null;
+                    File.WriteAllText(_configPath, Config.ToJson());
+                    op.SendSuccessMessage("世界种子已设为随机");
                 }
-            });
+                else
+                {
+                    bool flag = true;
+                    List<string> seedParts = new();
+                    foreach (string? i in args.Parameters)
+                    {
+                        if (flag)
+                        {
+                            flag = false;
+                            continue;
+                        }
+                        seedParts.Add(i);
+                    }
+                    Config.SetWorld.Seed = string.Join(" ", seedParts);
+                    File.WriteAllText(_configPath, Config.ToJson());
+                    op.SendSuccessMessage("世界种子已设置为:" + Config.SetWorld.Seed);
+                }
+
+                break;
         }
+    }
 
-        private string GetProgress()
+    private void PostReset()
+    {
+        Config.SqLs.ForEach(delegate(string c)
         {
-             return string.Format("{0:0.0%} - " + generationProgress.Message + " - {1:0.0%}", generationProgress.TotalProgress, generationProgress.Value);
-        }
-
-        private void OnServerJoin(JoinEventArgs args)
-        {
-            var plr = TShock.Players[args.Who];
-
-            Status status = this.status;
-            switch (status)
+            try
             {
-                case Status.Export:
-                    plr.Disconnect("正在导出存档数据...");
-                    args.Handled = true;
-                    break;
-                case Status.Cleaning:
-                    plr.Disconnect("重置数据中，请稍后...");
-                    args.Handled = true;
-                    break;
-                case Status.Generating:
-                    plr.Disconnect("生成地图中:" + GetProgress());
-                    args.Handled = true;
-                    break;
-                case Status.Available:
-                    break;
+                TShock.DB.Query(c, Array.Empty<object>());
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.ConsoleWarn($"[AutoReset]重置SQL({c})执行失败: {ex.Message}");
+            }
+            
+        });
+        foreach (KeyValuePair<string, string> keyValuePair in Config.Files!)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(keyValuePair.Value))
+                    File.Copy(Path.Combine(_filePath, keyValuePair.Value),
+                        Path.Combine(Environment.CurrentDirectory, keyValuePair.Key), true);
+                else
+                    File.Delete(keyValuePair.Key);
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.ConsoleWarn($"[AutoReset]重置文件({keyValuePair.Key})替换失败: {ex.Message}");
             }
 
         }
-        private void OnWorldSave(WorldSaveEventArgs args)
-        {
-            args.Handled = status != Status.Available && Main.WorldFileMetadata == null;
-        }
 
-        private readonly string ConfigPath = Path.Combine(TShock.SavePath, "reset_config.json");
-
-        private readonly string FilePath = Path.Combine(TShock.SavePath, "backup_files");
-
-        public static ResetConfig config;
-
-        private Status status;
-
-        public GenerationProgress ?generationProgress = null;
+        Config.PostResetCommands.ForEach(delegate(string c) { Commands.HandleCommand(TSPlayer.Server, c); });
     }
+
+    private string GetProgress()
+    {
+        return string.Format("{0:0.0%} - " + GenerationProgress!.Message + " - {1:0.0%}",
+            GenerationProgress.TotalProgress, GenerationProgress.Value);
+    }
+
+    private void OnServerJoin(JoinEventArgs args)
+    {
+        TSPlayer? plr = TShock.Players[args.Who];
+
+        Status status = _status;
+        switch (status)
+        {
+            case Status.Cleaning:
+                plr.Disconnect("[AutoReset]重置数据中，请稍后...");
+                args.Handled = true;
+                break;
+            case Status.Generating:
+                plr.Disconnect("[AutoReset]生成地图中:\n" + GetProgress());
+                args.Handled = true;
+                break;
+            case Status.Available:
+                break;
+        }
+    }
+
+    private void OnWorldSave(WorldSaveEventArgs args)
+    {
+        args.Handled = _status != Status.Available && Main.WorldFileMetadata == null;
+    }
+    
 }
+
 #endregion

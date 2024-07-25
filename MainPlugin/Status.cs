@@ -1,12 +1,8 @@
-﻿using System;
+﻿namespace AutoReset.MainPlugin;
 
-namespace AutoReset.MainPlugin
+internal enum Status
 {
-    internal enum Status
-    {
-        Available,
-        Generating,
-        Cleaning,
-        Export
-    }
+    Available,
+    Generating,
+    Cleaning
 }
