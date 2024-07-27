@@ -40,7 +40,7 @@ jobs:
           zip -r AutoReset.zip /home/runner/work/AutoReset/AutoReset/bin/Release/net6.0/AutoReset.*
       
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         with:
           prerelease: false
