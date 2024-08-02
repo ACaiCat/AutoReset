@@ -13,8 +13,8 @@ internal class Utils
             {
                 HttpClient client = new();
                 HttpResponseMessage? response;
-                client.Timeout = TimeSpan.FromSeconds(30.0);
-                response = client.GetAsync($"http://api.terraria.ink:22333/bot/send_reset?" +
+                client.Timeout = TimeSpan.FromSeconds(5.0);
+                response = client.GetAsync($"http://api.terraria.ink:22334/bot/send_reset?" +
                                            $"token={AutoResetPlugin.Config.CaiBotToken}" +
                                            $"&server_name={Main.worldName}" +
                                            $"&seed={(Main.ActiveWorldFileData.SeedText == "" ? Main.ActiveWorldFileData.Seed : Main.ActiveWorldFileData.SeedText)}")
