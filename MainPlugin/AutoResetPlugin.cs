@@ -31,7 +31,7 @@ public class AutoResetPlugin : TerrariaPlugin
 
     public override string Name => "AutoReset";
 
-    public override Version Version => new(2024, 7, 5);
+    public override Version Version => new(2024, 8, 2);
 
     public override string Author => "cc04 & Leader & 棱镜 & Cai";
 
